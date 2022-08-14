@@ -1,12 +1,28 @@
 ﻿using WebSocketSharp;
 using WebSocketSharp.Server;
 using Newtonsoft.Json;
+using System.Diagnostics;
 
 namespace Globus.PositionProvider
 {
+    public class Wd : WebSocketBehavior
+    {
+        protected override void OnMessage(MessageEventArgs eventArgs) {
+            var parsedData = JsonConvert.DeserializeObject<Aircraft>(eventArgs.Data);
+            MyTimer.StopTimer(parsedData);
+        }
+    }
+    public class MockSelfData : WebSocketBehavior
+    {
+        protected override void OnMessage(MessageEventArgs eventArgs) {
+            var parsedData = JsonConvert.DeserializeObject<Aircraft>(eventArgs.Data);
+            MyTimer.StartTimer(parsedData);
+            Sessions.Broadcast(JsonConvert.SerializeObject(parsedData));
+        }
+    }
     public class GetSelfPositionData : WebSocketBehavior
     {
-        private static Aircraft aircraft;
+        private static Aircraft aircraft = new Aircraft { CallSign = "SelfData", Position = new Position { Longitude = Randomizer.RandomDouble(34.4,35.6), Latitude = Randomizer.RandomDouble(30,33) }, TrueTrack = Randomizer.RandomDouble(0,360), Altitude = 0 };
 
         protected override void OnOpen()
         {
@@ -14,17 +30,9 @@ namespace Globus.PositionProvider
             Init();
         }
 
-        protected override void OnClose(CloseEventArgs e)
-        {
-            base.OnClose(e);
-            Console.WriteLine("Closed!!");
-        }
-
         private void Init()
         {
-            aircraft = new Aircraft { CallSign = "SelfData", Position = new Position { Longitude = Randomizer.RandomDouble(34.4,35.6), Latitude = Randomizer.RandomDouble(30,33) }, TrueTrack = Randomizer.RandomDouble(0,360), Altitude = 0 };
             aircraft.Simulate();
-            Console.WriteLine("Simulation Started");
 
             while (true)
             {
@@ -37,12 +45,13 @@ namespace Globus.PositionProvider
     {
         static void Main(string[] args)
         {
-            var wssv = new WebSocketServer("ws://localhost:4000");
+            var wssv = new WebSocketServer("ws://0.0.0.0:4000");
             wssv.AddWebSocketService<GetSelfPositionData>("/selfPosition");
+            wssv.AddWebSocketService<MockSelfData>("/mockData");
+            wssv.AddWebSocketService<Wd>("/wd");
             wssv.Start();
-            Console.WriteLine("Server started");
-            Console.ReadLine();
-            wssv.Stop();
+            Process.GetCurrentProcess().WaitForExit();
+            //wssv.Stop();
         }
     }
 }
